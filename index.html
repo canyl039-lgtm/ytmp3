@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>YTMP3</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0a0a0a; --surface: #111; --border: #222;
+      --red: #ff2b2b; --text: #f0f0f0; --muted: #555;
+      --glow: 0 0 40px rgba(255,43,43,0.25);
+    }
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: 'DM Mono', monospace;
+      min-height: 100vh; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; padding: 2rem;
+    }
+    body::after {
+      content: ''; position: fixed; inset: 0;
+      background: repeating-linear-gradient(to bottom, transparent 0px, transparent 3px, rgba(0,0,0,0.12) 3px, rgba(0,0,0,0.12) 4px);
+      pointer-events: none; z-index: 0;
+    }
+    .container {
+      position: relative; z-index: 1; width: 100%;
+      max-width: 680px; display: flex; flex-direction: column;
+      align-items: center; gap: 2rem;
+    }
+    .header { text-align: center; }
+    .logo {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(4rem, 12vw, 7rem);
+      letter-spacing: 0.04em; line-height: 0.9;
+    }
+    .logo span { color: var(--red); }
+    .tagline { font-size: 0.7rem; color: var(--muted); letter-spacing: 0.25em; text-transform: uppercase; margin-top: 0.5rem; }
+
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+    .cursor { display: inline-block; width: 2px; height: 0.85em; background: var(--red); vertical-align: middle; margin-left: 3px; animation: blink 1s step-end infinite; }
+
+    .card {
+      width: 100%; background: var(--surface);
+      border: 1px solid var(--border); padding: 2rem; position: relative;
+    }
+    .card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0;
+      height: 2px; background: var(--red); box-shadow: var(--glow);
+    }
+    .step-label { font-size: 0.65rem; letter-spacing: 0.2em; color: var(--red); text-transform: uppercase; margin-bottom: 0.75rem; }
+
+    .input-row { display: flex; width: 100%; }
+    .url-input {
+      flex: 1; background: #000; border: 1px solid var(--border); border-right: none;
+      color: var(--text); font-family: 'DM Mono', monospace; font-size: 0.85rem;
+      padding: 0.9rem 1rem; outline: none; transition: border-color 0.2s; min-width: 0;
+    }
+    .url-input::placeholder { color: var(--muted); }
+    .url-input:focus { border-color: var(--red); }
+    .convert-btn {
+      background: var(--red); color: #fff; border: none;
+      font-family: 'Bebas Neue', sans-serif; font-size: 1.1rem;
+      letter-spacing: 0.1em; padding: 0 1.5rem; cursor: pointer;
+      transition: background 0.15s; white-space: nowrap; flex-shrink: 0;
+    }
+    .convert-btn:hover { background: #ff4444; box-shadow: var(--glow); }
+    .convert-btn:disabled { background: #2a2a2a; color: #555; cursor: not-allowed; box-shadow: none; }
+
+    .status { font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; margin-top: 0.75rem; min-height: 1rem; color: var(--red); }
+    .status.ok { color: #2ecc71; }
+    .status.hide { opacity: 0; }
+
+    .result {
+      margin-top: 1.25rem; background: #000; border: 1px solid #1e1e1e;
+      padding: 1.25rem; display: none; align-items: center; gap: 1rem;
+    }
+    .result.show { display: flex; }
+    .result-thumb { width: 80px; height: 56px; object-fit: cover; flex-shrink: 0; border: 1px solid #222; }
+    .result-info { flex: 1; min-width: 0; }
+    .result-title { font-size: 0.75rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 0.3rem; }
+    .result-sub { font-size: 0.6rem; color: var(--muted); letter-spacing: 0.1em; }
+    .dl-btn {
+      background: #1a1a1a; border: 1px solid var(--red); color: var(--red);
+      font-family: 'Bebas Neue', sans-serif; font-size: 1rem; letter-spacing: 0.1em;
+      padding: 0.6rem 1.25rem; cursor: pointer; white-space: nowrap; flex-shrink: 0;
+      text-decoration: none; display: inline-block; transition: all 0.15s;
+    }
+    .dl-btn:hover { background: var(--red); color: #fff; }
+
+    .prog-wrap { margin-top: 1rem; display: none; }
+    .prog-wrap.show { display: block; }
+    .prog-label { font-size: 0.6rem; color: var(--muted); letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 0.35rem; }
+    .prog-bg { height: 2px; background: #1a1a1a; }
+    .prog-fill { height: 2px; background: var(--red); box-shadow: var(--glow); width: 0%; transition: width 0.5s ease; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { display: inline-block; width: 10px; height: 10px; border: 2px solid #333; border-top-color: var(--red); border-radius: 50%; animation: spin 0.7s linear infinite; margin-right: 6px; vertical-align: middle; }
+
+    @keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+    .header { animation: fadeUp 0.4s ease both; }
+    .card   { animation: fadeUp 0.4s 0.1s ease both; }
+    footer  { animation: fadeUp 0.4s 0.2s ease both; }
+
+    footer { position: relative; z-index: 1; font-size: 0.6rem; color: #2a2a2a; letter-spacing: 0.15em; text-align: center; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="logo">YT<span>MP3</span><span class="cursor"></span></div>
+    <div class="tagline">paste link — convert — download</div>
+  </div>
+
+  <div class="card">
+    <div class="step-label">// Paste your YouTube URL</div>
+    <div class="input-row">
+      <input class="url-input" id="urlInput" type="text" placeholder="https://www.youtube.com/watch?v=..." autocomplete="off" spellcheck="false"/>
+      <button class="convert-btn" id="convertBtn">CONVERT</button>
+    </div>
+
+    <div class="prog-wrap" id="progWrap">
+      <div class="prog-label" id="progLabel">Processing...</div>
+      <div class="prog-bg"><div class="prog-fill" id="progFill"></div></div>
+    </div>
+
+    <div class="status hide" id="status"></div>
+
+    <div class="result" id="result">
+      <img class="result-thumb" id="thumb" src="" alt=""/>
+      <div class="result-info">
+        <div class="result-title" id="resultTitle"></div>
+        <div class="result-sub">MP3 • High Quality</div>
+      </div>
+      <a class="dl-btn" id="dlBtn" href="#">⬇ DOWNLOAD</a>
+    </div>
+  </div>
+
+  <footer>RUNS ON YOUR OWN SERVER — PRIVATE & FREE</footer>
+</div>
+
+<script>
+  const urlInput   = document.getElementById('urlInput');
+  const convertBtn = document.getElementById('convertBtn');
+  const statusEl   = document.getElementById('status');
+  const progWrap   = document.getElementById('progWrap');
+  const progFill   = document.getElementById('progFill');
+  const progLabel  = document.getElementById('progLabel');
+  const resultBox  = document.getElementById('result');
+  const thumb      = document.getElementById('thumb');
+  const resultTitle= document.getElementById('resultTitle');
+  const dlBtn      = document.getElementById('dlBtn');
+
+  function extractVideoId(url) {
+    const m = url.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([\w\-]{11})/);
+    return m ? m[1] : null;
+  }
+
+  function showStatus(msg, ok = false) {
+    statusEl.textContent = msg;
+    statusEl.className = 'status' + (ok ? ' ok' : '');
+  }
+
+  function setProgress(pct, label) {
+    progWrap.classList.add('show');
+    progFill.style.width = pct + '%';
+    progLabel.textContent = label;
+  }
+
+  function resetUI() {
+    convertBtn.disabled = false;
+    convertBtn.textContent = 'CONVERT';
+    progWrap.classList.remove('show');
+    progFill.style.width = '0%';
+  }
+
+  async function convert() {
+    const url = urlInput.value.trim();
+    const vid = extractVideoId(url);
+
+    if (!url) { showStatus('⚠ paste a youtube link first'); return; }
+    if (!vid)  { showStatus('⚠ not a valid youtube url'); return; }
+
+    convertBtn.disabled = true;
+    convertBtn.innerHTML = '<span class="spinner"></span>CONVERTING';
+    resultBox.classList.remove('show');
+    statusEl.className = 'status hide';
+    setProgress(15, 'Starting conversion...');
+
+    let pct = 15;
+    const ticker = setInterval(() => {
+      if (pct < 85) { pct += Math.random() * 8; setProgress(Math.min(pct, 85), 'Converting to MP3...'); }
+    }, 800);
+
+    try {
+      const res = await fetch('/download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url })
+      });
+
+      clearInterval(ticker);
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        showStatus('✗ ' + (err.error || 'Something went wrong'));
+        resetUI(); return;
+      }
+
+      setProgress(100, 'Done!');
+
+      const blob = await res.blob();
+      const disposition = res.headers.get('Content-Disposition') || '';
+      const match = disposition.match(/filename="?([^"]+)"?/);
+      const filename = match ? decodeURIComponent(match[1]) : 'audio.mp3';
+
+      const objectUrl = URL.createObjectURL(blob);
+
+      thumb.src = `https://img.youtube.com/vi/${vid}/mqdefault.jpg`;
+      resultTitle.textContent = filename.replace('.mp3', '');
+      dlBtn.href = objectUrl;
+      dlBtn.download = filename;
+      resultBox.classList.add('show');
+      showStatus('✓ ready! click download', true);
+      resetUI();
+
+    } catch(e) {
+      clearInterval(ticker);
+      showStatus('✗ connection error');
+      resetUI();
+    }
+  }
+
+  convertBtn.addEventListener('click', convert);
+  urlInput.addEventListener('keydown', e => { if (e.key === 'Enter') convert(); });
+
+  urlInput.addEventListener('focus', async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text && extractVideoId(text) && !urlInput.value) {
+        urlInput.value = text;
+        showStatus('✓ link pasted from clipboard', true);
+        setTimeout(() => statusEl.className = 'status hide', 2000);
+      }
+    } catch(_) {}
+  });
+</script>
+</body>
+</html>
