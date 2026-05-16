@@ -1,5 +1,5 @@
 const express = require("express");
-const { exec } = require("child_process");
+const youtubeDl = require("youtube-dl-exec");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
@@ -10,7 +10,7 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
-app.post("/download", (req, res) => {
+app.post("/download", async (req, res) => {
   const { url } = req.body;
 
   const ytRegex = /^(https?:\/\/)?(www\.)?(youtube\.com\/(watch\?v=|shorts\/)|youtu\.be\/)[\w\-]{11}/;
@@ -18,32 +18,45 @@ app.post("/download", (req, res) => {
     return res.status(400).json({ error: "Invalid YouTube URL" });
   }
 
-  const tmpDir = os.tmpdir();
-  const outputTemplate = path.join(tmpDir, "%(title)s.%(ext)s");
+  try {
+    // Get video info first
+    const info = await youtubeDl(url, {
+      dumpSingleJson: true,
+      noWarnings: true,
+      noCallHome: true,
+      preferFreeFormats: true,
+    });
 
-  const cmd = `yt-dlp -x --audio-format mp3 --audio-quality 0 -o "${outputTemplate}" --print after_move:filepath "${url}"`;
+    const title = info.title || "audio";
+    const safeTitle = title.replace(/[^\w\s\-]/g, "").trim();
+    const outputPath = path.join(os.tmpdir(), `${safeTitle}.mp3`);
 
-  exec(cmd, { timeout: 180000 }, (err, stdout, stderr) => {
-    if (err) {
-      console.error("yt-dlp error:", stderr);
+    // Download as mp3
+    await youtubeDl(url, {
+      extractAudio: true,
+      audioFormat: "mp3",
+      audioQuality: 0,
+      output: outputPath,
+      noWarnings: true,
+    });
+
+    if (!fs.existsSync(outputPath)) {
       return res.status(500).json({ error: "Conversion failed." });
     }
 
-    const filePath = stdout.trim().split("\n").pop();
-    if (!filePath || !fs.existsSync(filePath)) {
-      return res.status(500).json({ error: "Output file not found." });
-    }
-
-    const fileName = path.basename(filePath);
-    res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(fileName)}"`);
+    res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(safeTitle)}.mp3"`);
     res.setHeader("Content-Type", "audio/mpeg");
 
-    const stream = fs.createReadStream(filePath);
+    const stream = fs.createReadStream(outputPath);
     stream.pipe(res);
     stream.on("close", () => {
-      try { fs.unlinkSync(filePath); } catch (_) {}
+      try { fs.unlinkSync(outputPath); } catch (_) {}
     });
-  });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Download failed: " + err.message });
+  }
 });
 
 app.listen(PORT, () => {
